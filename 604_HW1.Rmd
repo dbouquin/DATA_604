@@ -1,0 +1,143 @@
+---
+title: "DATA 604 HW1"
+author: "Daina Bouquin"
+date: "September 3, 2016"
+output: html_document
+---
+
+DES textbook problems: 1.1, 2.1, 2.2, 2.4, 2.5, 2.7, 2.8  
+  
+####1.1: 
+Name several entities, attributes, activities, events, and state variable for each of the following systems 
+
+#####a. Cafeteria:   
+    + entities - customers, servers, cashiers, tables, chairs  
+    + attributes - rate of service bey servers/chashiers, number of seats at a table 
+    + activities - waiting in line, being served food, serving food, waiting to cash out, sitting at a table eating, cashing out a customer
+    + events - arriving customer, leaving customer, customer arriving at checkout  
+    + state variable - number of people waiting, number of people at tables, number of customers, number of servers, number of cashiers, number of open chairs  
+#####b. Grocery store  
+    + entities - customers, cashiers, checkout lanes  
+    + attributes - customers paying with cash, customers paying with card card, items allowed in a lane, paper or plastic bags, number of items per customer, rate of checkout by cashier
+    + activities - waiting in line, waiting to cash out, cashing out a customer
+    + events - arriving customer, leaving customer, customer arriving at checkout  
+    + state variable - number of people waiting, number of customers, number of cashiers, number of checkout lanes
+####c. Laundromat  
+    + entities - customers, washing machines, dryers 
+    + attributes - run time of washing machines, run time of drying machines  
+    + activities - washing clothes, switching clothes from washer to dryer, waiting for clothing to dry, waiting for washer or dryer
+    + events - arriving customer, leaving customer, wash cycle starts, wash cycle stops, dry cycle starts, dry cycle stops  
+    + state variable - number of people waiting, number of dryers in use, number of washers in use
+####d. Fast-food restaurant  
+    + entities - customers, servers, cashiers, cook, tables, chairs  
+    + attributes - customers take-out or to-go, speed of cook, speed of cashier 
+    + activities - waiting in line, being served food, serving food, cooking food, waiting to cash out, sitting at a table eating, cashing out a customer
+    + events - arriving customer, leaving customer, customer arriving at checkout  
+    + state variable - number of people waiting, number of people at tables, number of people doing take-out, number of cashiers, number of chairs, number of tables, number of cooks  
+####e. Hospital emergency room  
+    + entities - patients, admitting nurses, doctors, EMT, beds  
+    + attributes - patients per doctor, triage time of nurse, severity of patient injury
+    + activities - arriving at ER, nurse assessment, patient exam by doctor, treating the patient, waiting in receiving area
+    + events - arriving at ER, triage start/end, treatment start/end, exam start/end, patient discharged
+    + state variable - number of patients arriving, number of busy nurses, number of busy doctors, number of beds available  
+####f. Taxicab company with 10 taxis  
+    + entities - taxis, riders, dispatcher  
+    + attributes - rider capacity of cab, speed of dispatcher, distance of cab ride
+    + activities - waiting for cab, riding in cab, paying driver, driving to pick up rider
+    + events - rider calls dispatcher, taxi goes to pick up rider, ride starts, ride ends  
+    + state variable - number of people waiting, number of people at tables  
+#####g. Automobile assembly line  
+    + entities - workers, machines, materials
+    + attributes - inventory of material, speed of machines, speed of workers, breakdown rate of machines
+    + activities - building, monitoring machines
+    + events - start assembly, end assembly, building, machine breakdown  
+    + state variable - machine status, material inventory high or low 
+   
+####2.1: 
+Consider the following continuously operating job shop. Interarrival times of jobs are distributed as follows:
+```{r, echo=FALSE}
+Time_Between_Arrivals <- c(0:3)
+Prob <- c(.23,.37,.28,.12)
+table2.1 <- data.frame(cbind(Time_Between_Arrivals,Prob))
+table2.1
+```
+Processing times of jobs are normally distributed, with mean 50 mins and SD 8 mins. Construct a simulation table and perform a simulation for 10 new customers. Assume that when the simulation begins, there is one job being processed (to be completed in 25 mins) and another job in the queue that will take 50 mins. What is the average time in the queue for the 10 new jobs? What was the average processing time of the 10 new jobs? What was the max time in the system for the 10 new jobs?
+```{r}
+set.seed(1500)
+
+# DF of jobs already in queue
+in_queue <- data.frame(job=c(-1, 0), #first two jobs
+                           inter_arrive_h=c(0,0), 
+                           inter_arrive_m=c(0,0), 
+                           arrive_m=c(0,0),
+                           srvc_time_m=c(25, 50), # 25 min job and 50 min job
+                           srvc_begin_time=c(0, 25),
+                           wait_m=c(0,25),
+                           srvc_end_time=c(25, 75),
+                           total_time=c(25,75))
+# DF for new 10 jobs
+new_ten <- data.frame(job=seq(1, 10), 
+                      inter_arrive_h=c(0, sample(seq(0, 3), # details from table
+                                              size=9, 
+                                              prob=c(.23, .37, .28, .12), 
+                                              replace=TRUE)), 
+                      inter_arrive_m=rep(NA, 10), 
+                      arrive_m=rep(0, 10),
+                      srvc_time_m=rnorm(10, mean=50, sd=8),
+                      srvc_begin_time=rep(0, 10),
+                      wait_m=rep(0, 10),
+                      srvc_end_time=rep(0, 10),
+                      total_time=rep(0, 10))
+
+# Convert time between arrivals from hours to minutes and find arrival times.
+new_ten$inter_arrive_m <- new_ten$inter_arrive_h*60
+new_ten$arrive_m <- cumsum(new_ten$inter_arrive_m) # cumulative sum
+
+# Merge the DFs by row
+new_table <- rbind(in_queue, new_ten)
+
+# Compute final times
+for(i in seq(3, nrow(new_table))) # row 3 forward are the simulated records
+{
+  new_table[i,]$srvc_begin_time <- max(new_table[i,]$arrive_m, new_table[i-1,]$srvc_end_time)
+  new_table[i,]$wait_m <- new_table[i,]$srvc_begin_time - new_table[i,]$arrive_m
+  new_table[i,]$srvc_end_time <- new_table[i,]$srvc_begin_time + new_table[i,]$srvc_time_m
+  new_table[i,]$total_time <- new_table[i,]$srvc_end_time - new_table[i,]$arrive_m
+}
+
+# Remove unnecessary hours column
+drop <- "inter_arrive_h"
+new_table <- new_table[ , !(names(new_table) %in% drop)]
+
+# Show the simulation table
+new_table
+colnames(new_table)
+```
+a. What is the average time in the queue for the 10 new jobs?
+```{r}
+mean(new_table[3:12,6])
+```
+b. What was the average processing time of the 10 new jobs?
+```{r}
+mean(new_table[3:12,4])
+```
+c. What was the maximum time in the system for the 10 new jobs?
+```{r}
+max(new_table[3:12,8])
+```
+####2.2: 
+A baker is trying to figure out how many dozens of bagels to bake each day. The probability distribution of the number of bagel customers is as follows:
+```{r}
+Customers_per_Day <- c(8,10,12,14)
+Prob <- c(.35,.3,.25,.10)
+table2.2a <- data.frame(rbind(Customers_per_Day,Prob))
+table2.2a
+```
+Customers order 1,2,3, or 4 dozen bagels according to the following probability distribution:
+```{r}
+Dozens_per_Customer <- c(1,2,3,4)
+Prob <- c(.4,.3,.2,.1)
+table2.2b <- data.frame(rbind(Dozens_per_Customer,Prob))
+table2.2b
+```
+Bagels sell for $8.40 per dozen. They cost $5.80 per dozen to make. All bagels not sold at the end of the day are sold at half price. Based on 5 days simulation, how many dozen (to the nearest 5 dozen) bagels should be baked each day?
