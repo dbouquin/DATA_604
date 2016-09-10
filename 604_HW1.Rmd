@@ -208,7 +208,18 @@ d. Daily demand is normally distributed, with a mean of 5 units and a standard d
 e. Lead time is distributed uniformly between zero and 5 days - integers only.   
 f. The simulation will start with 18 units in inventory.   
 g. For simplicity, assume that orders are placed at the close of the business day and received after the lead time has occured. Thus, if lead time is one day, the order is available for distribution on the morning of the second day of business following the placement of the order.   
-h. Let the simulation run for 5 weeks.   
+h. Let the simulation run for 5 weeks.    
+
+#####Answer:
+Excel Solution: Modified "Example2.8RefrigInventory.xls" from the text.    
+a. Assume review period = 1 day. I adjusted the pending order only when the previous "days until order arrives" = 0 to prevent overlapping orders. Running the simulation \ 5 times results in lost sales: 3, 4, 1, 2, 6.      
+b. Assume the review period back to = 5 days. Max inventory adjusted to 20, and pending order column formula adjusted so the order would always be 20 - I. Running the simulation 5 times results in lost sales: 1, 11, 5, 0, 0.     
+c. Initially (a,b) number of shortages was used as a proxy to lost sales. To calculate a more explicit condition, I created a column in the spreadsheet to show when the inventory level was 0 and there was demand. The demand added as the number of lost sales. Running the simulation 5 times results in lost sales: 4, 4, 0, 5, 0.       
+d. Using the rules expressed in part c, adjustments were made to the original spreadsheet with new conditions: =IF(INT(1.5timesNORM.S.INV(rnd01())+5)>=0, INT(1.5timesNORM.S.INV(rnd01())+5),0) to create a normally distributed demand. Running the simulation 5 times results in lost sales: 238, 228, 163, 216, 174.      
+e. The original lead time formula is adjusted to =IF(D19=$L$6,discreteuniform(0,5),0). Running the simulation 5 times results in lost sales: 210, 133, 83, 260, 78.     
+f. The default max number of units was originally 11. This was adjusted to 20 in the original spreadsheet. Running the simulation 5 times results in 0 lost sales.
+g. No adjustments were needed.
+h. The "length" of the simulation table is adjusted resulting in shortages: 20, 13, 3, 18, 2
 
 ####2.8:
 An elevator in a manufacturing plan carries exactly 400 kg of material. There are three kinds of material packaged in boxes that arrive for a ride on the elevator. these materials and their distributions of time between arrivales are as follows:
