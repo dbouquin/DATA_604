@@ -1,0 +1,429 @@
+---
+title: "DATA 604: HW5"
+author: "Daina Bouquin"
+date: "Nov 1, 2016"
+output: html_document
+---
+```{r}
+library(ggplot2)
+library(reshape2)
+```
+
+###### Problem 1
+
+**1.a Give the Markov transition matrix for X.**
+
+```{r}
+x <- matrix(c(0.9,0.05,0.03,0.02,0,0.85,0.09,0.06,0,0,0.9,0.1,1,0,0,0),byrow=TRUE,nrow=4)
+row.names(x) <- c('low','med','high','failed')
+colnames(x) <- c('low','med','high','failed')
+x
+```
+
+**1.b A new machine always starts in the low state. What is the probability that the machine is in the failed state three weeks after it is new?**
+
+```{r}
+x0 <- matrix(c(1,0,0,0),nrow=1)
+x0%*%x%*%x%*%x
+```
+
+0.0277
+
+**1.c What is the probability that a machine has at least one failure three weeks after it is new?**
+
+```{r}
+x <- matrix(c(0.9,0.05,0.03,0.02,0,0.85,0.09,0.06,0,0,0.9,0.1,0,0,0,1),byrow=TRUE,nrow=4)
+x0 <- matrix(c(1,0,0,0),nrow=1)
+x0%*%x%*%x%*%x
+```
+
+0.0713
+
+**1.d What is the expected number of weeks after a new machine is installed until the first failure occurs?**
+
+```{r}
+fx <- function(n) {
+  x <- matrix(c(0.9,0.05,0.03,0.02,0,0.85,0.09,0.06,0,0,0.9,0.1,1,0,0,0),byrow=TRUE,nrow=4)
+  if (n==1) return(x)
+  else return(x%*%fx(n-1))
+}
+
+gx <- function(n) {
+  x0 <- matrix(c(1,0,0,0),nrow=1)
+  x = x0%*%fx(n)
+  return(x[,4])
+}
+
+N=40
+
+# create dataframe 
+df1 = data.frame(N=c(), P=c())
+for (n in 1:N) {
+  N = c()
+  N = append(N, n)
+  P = c()
+  P = append(P,gx(n))
+  df = data.frame(N=N, P=P)
+  df1 = rbind(df1, df)
+}
+
+# nls = nonlinear least squares
+model <- nls(N ~ I(exp(1)^(a + b * P)), data=df1, start = list(a=0,b=0))
+model
+
+a = -9.515
+b = 263.63
+fx <- function(x) { if (x >= 0 && x <= 1) {y <- I(exp(1)^(a + b * x))}}
+
+sample.x = runif(10000,0,1)
+accept = c()
+
+for(i in 1:length(sample.x)){
+  U = runif(1, 0, N)
+  if(U <= fx(sample.x[i])) {
+    accept = append(accept,U)
+  }
+}
+
+mean(accept)
+```
+
+20 weeks
+
+**1.e On average, how many weeks per year is the machine working?**
+
+```{r}
+N=round(365/7)
+
+a = 1.317
+b = 2.626
+fx <- function(x) { if (x >= 0 && x <= 1) {y <- I(exp(1)^(a + b * x))}}
+
+sample.x = runif(10000,0,1)
+accept = c()
+for(i in 1:length(sample.x)){
+  U = runif(1, 0, N)
+  if(U <= fx(sample.x[i])) {
+    accept = append(accept,U)
+  }
+}
+
+mean(accept)
+```
+14 weeks
+
+**1.f Each week that the machine is in the low state, a profit of $1000 is realized; each week that the machine is in the medium state, a profit of $500 is realized; each week that the machine is in the high state, a profit of $400 is realized; and the week in which a failure is fixed, a cost of $700 is incurred. What is the long-run average profit per week realized by the machine?**
+
+```{r}
+f <- matrix(c(1000,500,400,-700),nrow=4)
+
+fx <- function(n) {
+  x <- matrix(c(0.9,0.05,0.03,0.02,0,0.85,0.09,0.06,0,0,0.9,0.1,1,0,0,0),byrow=TRUE,nrow=4)
+  if (n==1) return(x)
+  else return(x%*%fx(n-1))
+}
+
+fx(100)[1,]%*%f
+```
+
+$657.38 on average per week
+
+**1.g A suggestion has been made to change the maintenance policy for the machine.If at the start of a week the machine is in the high state, the machine will be taken out of service and repaired so that at the start of the next week it will again be in the low state. When a repair is made due to the machine being in the high state instead of a failed state, a cost of $600 is incurred. Is this new policy worthwhile?**
+
+```{r}
+fnew <- matrix(c(1000,500,-600,-700),nrow=4)
+
+x <- matrix(c(0.9,0,1,1,0.05,0.85,0,0,0.03,0.09,0,0,0.02,0.06,0,0),nrow=4)
+
+fx <- function(n) {
+  x <- matrix(c(0.9,0,1,1,0.05,0.85,0,0,0.03,0.09,0,0,0.02,0.06,0,0),nrow=4)
+  if (n==1) return(x)
+  else return(x%*%fx(n-1))
+}
+
+fx(100)[1,]%*%fnew
+```
+The difference is $111.92 per week. The policy is worthwhile.
+
+##### Problem 2
+Estimate the posterior distribution of θ given the observed sample, using the Metropolis-Hasting random walk sampler with a uniform proposal distribution.
+
+```{r}
+rw_met <- function(x0, N) {
+  x <- numeric(N)
+  x[1] <- x0
+  u <- runif(N)
+  k <- 0
+  K <- c(125,18,20,34)
+  for (i in 2:N) {
+    y <- runif(1)
+    if (u[i] <= ((2+y)^K[1] * (1-y)^(K[2]+K[3]) * y^K[4])/ 
+        ((2+x[i-1])^K[1] * (1-x[i-1])^(K[2]+K[3]) * x[i-1]^K[4])) {x[i]<-y}
+    else{
+      x[i] <- x[i-1]
+      k <- k + 1 }
+}
+return(list(x=x, k=k)) }
+
+test <- rw_met(0.4,10000)
+mean(test$x)
+```
+Mean θ = 0.624.
+
+##### Problem 3
+Define function `fullcondm( m,lambda,phi,y,n,alpha0,beta0,gamma0,delta0 )`   
+– the conditional probability that the true change point is the parameter value passed in m, given
+the other values.    
+`Lamexp = sum(Y(1:m)) if m > 1, 0 otherwise`    
+`Phiexp = sum(Y(m+1:n) if m < n, 0 otherwise`   
+`Return prob = lambda^(alpha0-1+lamexp)*exp(-(beta0+m)*lambda)*    phi^(gamma0-1+phiexp)*exp(-(delta0+n-m)*phi);`   
+
+**3a. Run your code for 5000 iterations. Create and save the following figures.**
+
+Histogram of lambda   
+Histogram of phi Histogram of m   
+Plot of lambda vs. phi    
+Plot of lambda vs. m    
+Plot of beta vs. delta   
+
+```{r}
+set.seed(2345)
+
+# Y from prompt
+Y= c(4,5,4,1,0,4,3,4,0,6,3,3,4,0,2,6,3,3,5,4,5,3,1,4,4,1,5,5,3,4,2,5,2,2,3,4,2,1,3,
+    2,2,1,1,1,1,3,0,0,1,0,1, 1,0,0,3,1,0,3,2,2,0,1,1,1,0,1,0,1,0,0,0,2,1,0,0,0,1,1,
+    0,2,3,3,1,1,2,1,1,1,1,2,4,2,0,0,0,1,4,0,0,0,1,0,0, 0,0,0,1,0,0,1,0,1)
+
+#iterations
+N <- 5000
+n <- length(Y)
+lambda <- phi <- m <- numeric(N)
+L <- numeric(n)
+m[1] <- sample(1:n,1)
+lambda[1] <- 1
+phi[1] <- 1
+beta <- 1
+delta <- 1
+
+for ( i in 2:N) {
+  mt <- m[i-1]
+  r <- .5 + sum(Y[1:mt])
+  lambda[i] <- rgamma(1,shape=r,rate=mt+beta)
+  if (mt+1>n) r <- -.5 +sum(Y) else
+    r <- .5 +sum(Y[(mt+1):n])
+  phi[i] <- rgamma(1,shape=r, rate=n-mt+delta)
+  beta <- c(beta, rgamma(1,shape=0.5,rate=lambda[i]+1))
+  delta <- c(delta, rgamma(1,shape=0.5,rate=phi[i]+1))
+  
+  for (j in 1:n) {
+    L[j] <- exp((phi[i]-lambda[i])*j)*(lambda[i]/phi[i])^sum(Y[1:j])
+  }
+  L <- L/sum(L)
+  m[i] <- sample(1:n,prob=L,size=1)
+}
+
+df <- data.frame(lambda=lambda,phi=phi,m=m,beta=beta,delta=delta)
+
+# plots
+ggplot(df, aes(x=lambda)) + geom_histogram()
+ggplot(df, aes(x=phi)) + geom_histogram()
+ggplot(df,aes(x=lambda,y=phi)) + geom_point()
+ggplot(df, aes(x=m)) + geom_histogram(binwidth=0.5)
+ggplot(df,aes(x=beta,y=delta)) + geom_point()
+```
+
+**3b. When do you think the change point occurred, based on your results? Can you put a 95% confidence bound on this result? What were the average rates of coal mining accidents before and after the change? Are these results consistent with the time series of the observations? Why or why not?**
+
+```{r}
+mean(m)
+mean(Y[1:40]) # average before the change point
+mean(Y[41:n]) # average after the change point
+```
+
+From mean(m) you can see that the change point occured near the 40th point.   
+From the histogram of m we know the distribution skewed and not a normal distribution, so we should not calculate the 95% confidence interval.    
+Average rates before the change is 3.125; the average rates after is about 0.92.
+
+**3c. How is Gibbs sampling different from the Metropolis-Hastings approach?**
+The Metropolis-Hastings algorithms are a class of Markov Chain Monte Carlo methods including the special cases of Metropolis sampler, Gibbs sampler, independence sampler, and random walk. The Gibbs sampler is sometimes applied when the target is a multivariate distribution.
+
+##### Problem 4
+**4.1 Write a function that returns the total cost of a candidate solution for TSP, given the proposed solution and the cost matrix.**
+
+```{r}
+# had to be hand typed.
+C <- matrix(c(0,633,257,91,412,150,80,134,259,505,353,324,70,211,268,246,121,
+              633,0,390,661,227,488,572,530,555,289,282,638,567,466,420,745,518,
+              257,390,0,228,169,112,196,154,372,262,110,437,191,74,53,472,142,
+              91,661,228,0,383,120,77,105,175,476,324,240,27,182,239,237,84,
+              412,227,169,383,0,267,351,309,338,196,61,421,346,243,199,528,297,
+              150,488,112,120,267,0,63,34,264,360,208,329,83,105,123,364,35,
+              80,572,196,77,351,63,0,29,232,444,292,297,47,150,207,332,29,
+              134,530,154,105,309,34,29,0,249,402,250,314,68,108,165,349,36,
+              259,555,372,175,338,264,232,249,0,495,352,95,189,326,383,202,236,
+              505,289,262,476,196,360,444,402,495,0,154,578,439,336,240,685,390,
+              353,282,110,324,61,208,292,250,352,154,0,435,287,184,140,542,238,
+              324,638,437,240,421,329,297,314,95,578,435,0,254,391,448,157,301,
+              70,567,191,27,346,83,47,68,189,439,287,254,0,145,202,289,55,
+              211,466,74,182,243,105,150,108,326,336,184,391,145,0,57,426,96,
+              268,420,53,239,199,123,207,165,383,240,140,448,202,57,0,483,153,
+              46,745,472,237,528,364,332,349,202,685,542,157,289,426,483,0,336,
+              121,518,142,84,297,35,29,36,236,390,238,301,55,96,153,336,0),
+            byrow=T, nrow=17)
+
+n = dim(C)[1]
+x = sample(c(1:n),n)
+
+f.cost <- function(x,C) {
+  cost <- 0
+  i = 1
+  n = dim(C)[1]
+  while (i < n) {
+    cost.i <- C[x[i],x[i+1]]
+    cost <- cost + cost.i
+    i = i + 1
+  }
+  return(cost)
+}
+```
+
+**4.2 Write a function to perform simulated annealing that takes three input parameters: the initial temperature T0, beta (determines annealing schedule), and number of iterations, and returns two results: the solution vector x and the cost of the solution s.**
+
+```{r}
+f.anneal <- function(T0,N,beta,C) {
+  n = dim(C)[1]
+  Temp = T0
+  X = sample(c(1:n),n)
+  Sx <- f.cost(X,C)
+  xopt <- X
+  sopt <- Sx
+  costs = numeric(N)
+  
+  for (i in 1:N) {
+    x = sample(c(1:n),n)
+    I = sort(c(x[1],x[2]))
+    if(I[2]==n) {
+      Y <- c(X[1:I[1]-1], X[n:I[1]])
+    } else {
+      Y <- c(X[1:I[1]-1], X[I[2]:I[1]], X[(I[2]+1):n])
+    }
+    Sy = f.cost(Y,C)
+    Sx = f.cost(X,C)
+    
+    if(Sy < Sx) {
+      alpha <- 1
+    }else{
+      alpha <- exp(-(Sy -Sx)/Temp)
+    }
+    u <- runif(1)
+    if (u < alpha) {
+      X <- Y
+      Sx <- Sy
+    }
+    Temp <- beta * Temp
+    xopt = X
+    sopt = Sx
+    costs[i] = sopt
+  }
+  return(list(x=xopt,costs=costs))
+}
+```
+
+**4.3 Test this code with initial parameters T0=1, beta=0.9999, iterations = 10000. How does the cost of the minimum solution compare with the cost of a random tour?**
+
+```{r}
+N = 10000
+beta = 0.9999
+T0 = 1
+
+result = f.anneal(T0,N,beta,C)
+
+min(result$costs) # minsolution
+
+f.cost(x,C) # random tour
+```
+Compared to the cost of a "random tour" the minimum solution is 2447 lower.
+
+**4.4 Plot the cost of the current best solution as a function of iteration number. What do you notice about the performance of simulated annealing?**
+
+```{r}
+df = data.frame(Cost=result$costs,N=c(1:N))
+ggplot(df,aes(x=N,y=Cost)) +geom_point()
+```
+Min is reached at about 500
+
+**4.5 Repeat the simulated annealing procedure 3 or 4 times and comment on the variability of the minimum cost and the optimal solution from repeated attempts.**
+
+```{r}
+#optimal
+f.opt <- function(N,C) {
+  n = dim(C)[1]
+  X = sample(c(1:n),n)
+  Sx <- f.cost(X,C)
+  xopt <- X
+  sopt <- Sx
+  costs = numeric(N)
+  
+  for (i in 1:N) {
+    Y = sample(c(1:n),n)
+    Sy = f.cost(Y,C)
+    Sx = f.cost(X,C)
+    
+    if(Sy < Sx) {
+      X <- Y
+      Sx <- Sy
+    }
+    xopt = X
+    sopt = Sx
+    costs[i] = sopt
+  }
+  return(list(x=xopt,costs=costs))
+}
+```
+
+```{r}
+# check performance of optimal
+result = f.opt(N,C)
+df = data.frame(opt.cost=result$costs,N=c(1:N))
+ggplot(df,aes(x=N,y=opt.cost)) + geom_point()
+
+# repeat 4 times with N=10000 iteractions.
+m = 4
+N = 10000
+min.cost = numeric(m)
+for (i in 1:m) {
+  result = f.anneal(T0,N,beta,C)
+  min.cost[i] = min(result$costs)
+}
+
+opt.cost <- numeric(m)
+for (i in 1:m) {
+  result = f.opt(N,C)
+  opt.cost[i] = min(result$costs)
+}
+
+df <- data.frame(m=c(1:m), opt.cost=opt.cost, min.cost=min.cost)
+df.long <- melt(df, id = 'm')
+ggplot(df.long, aes(x=m, y=value, colour = variable)) + geom_line() +
+  labs(title='N=10000')
+
+# repeat again (4 times) with N=1000
+N = 1000
+min.cost = numeric(m)
+for (i in 1:m) {
+  result = f.anneal(T0,N,beta,C)
+  min.cost[i] = min(result$costs)
+}
+
+opt.cost <- numeric(m)
+for (i in 1:m) {
+  result = f.opt(N,C)
+  opt.cost[i] = min(result$costs)
+}
+
+df <- data.frame(m=c(1:m), opt.cost=opt.cost, min.cost=min.cost)
+df.long <- melt(df, id = 'm')
+ggplot(df.long, aes(x=m, y=value, colour = variable)) + geom_line() +
+  labs(title='N=1000')
+```
+Cost of the optimal solution is higher than the cost of minimum cost solution regardless of iterations.
