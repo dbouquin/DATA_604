@@ -1,0 +1,334 @@
+---
+title: "DATA604_HW3"
+output: html_document
+date: "October 6, 2016"
+author: Daina Bouquin
+---
+
+##### 1. Starting with \(X_0=1\), write down the entire cycle for \(X_i=11X_{i-1}\text{ mod}(16)\)
+
+```{r}
+f1 <- function(X_0) {
+  df <- data.frame(X=c(), R=c())  
+  x <- X_0
+  
+  while(TRUE) {
+    X_i <- (11 * x) %% 16
+    df <- rbind(df, data.frame(X=x, R=X_i))
+    x <- X_i
+    
+    if(X_i == X_0) {
+      break
+    }
+  }
+  return(df)
+}
+
+# X_0 = 1
+(q1 <- f1(1))
+```
+   
+#####2. Using the LCG provided below: \(X_i=(X_{i-1} + 12) mod(13)\), plot the pairs \((U_1.U_2), (U_2, U_3),...\) and observe the lattice structure obtained. Discuss what you observe.
+
+```{r}
+library(lattice) 
+
+X_0 <- 0
+X <- c(X_0)
+i<-1
+n <- 1000
+
+while (i <= n) {
+  x = (12+X[i])%%13 
+  X=append(X,x) 
+  i=i+1
+}
+
+x <- X[1:999] 
+y <- X[2:1000] 
+xyplot(y~x)
+```
+   
+From the graph, we can see that there are only 13 points.
+
+##### 3. Implement the pseudo-random valber generator: 
+
+\[X_i = 16807X_{i-1} \text{ mod}(2^{31} - 1)\]
+
+##### Using the seed 1234567, run the generator for 100,000 observations. Perform a chi-square goodness-of-fit test on the resulting PRN's. Use 20 equal-probability intervals and level \(\alpha = 0.05\). Now perform a runs up-and-down test with \(\alpha = 0.05\) on the observvations to see if they are independent.
+
+```{r}
+X_0 <- 1234567
+X <- c(X_0)
+i<-1
+n <- 100000
+
+while (i <= n) {
+  x=(16807*X[i])%%(2**31-1) 
+  X=append(X,x)
+  i=i+1
+}
+
+X <- X/(2**31-1) 
+
+#histogram
+q3 <- hist(X,breaks=20, col='grey')
+obs <- q3$counts
+pred <- round(c(rep(n/20,20))) 
+test <- cbind(obs, pred) 
+result <- chisq.test(test)
+result
+```
+   
+From the chi-square test, we can see two sets of valbers are not independent. So, we can say the pseudo-random valbers follow uniform distribution.   
+   
+Runs Up and Down Test   
+```{r}
+library(tseries)
+# construct +/- vector by converting to boolean.
+r <- rep(NA, n - 1) 
+for(i in 1:n - 1) {
+  r[i] <- X[i] < X[i + 1]
+}
+(runs <- runs.test(as.factor(r))) 
+```
+   
+The p-value is < 0.05. Therefore the null is rejected and we say that the valbers are not independent.
+   
+##### 4. Give inverse-transforms, composition, and acceptance-rejection algorithms for generating from the following density:
+
+\[f(x)=
+  \begin{cases} 
+    \frac{3x^2}{2} & -1 \leq x \leq 1 \\
+    0              & otherwise  \\
+  \end{cases}
+\]
+
+```{r}
+#Inverse-Transforms 
+n <- 10000
+u <- runif(n) 
+R <- c(0)
+
+for (i in u) {
+  factor = sign(2*i-1)
+  i = factor*((abs(2*i-1))**(1/3)) 
+  R = append(R,i)
+}
+hist(R, prob=TRUE, main= expression(f(x)==3/2*x^2), xlab='Inverse Transform', col="firebrick4")
+
+# Composition
+n <- 10000
+u <- runif(n) 
+R <- c(0)
+
+for (i in u) {
+  i1 = i**(1/3) 
+  i2 = -(i**(1/3)) 
+  R = append(R,i1) 
+  R = append(R,i2)
+}
+
+hist(R, prob=TRUE, main=expression(f(x)==3/2*x^2), xlab='Composition', col="dark blue")
+
+# Acceptance-Rejection
+n <- 10000
+k <- 1
+R <- numeric(n)
+
+while (k<=n) {
+  x <- runif(1,-1,1)
+  u <- runif(1,0,1) 
+if(x^2 > u) {
+  R[k] <- x
+  k <- k + 1 }
+}
+hist(R,prob=TRUE,main=expression(f(x)==3/2*x^2), xlab='Acceptance-Rejection', col="darkmagenta")
+```
+   
+##### 5. Implement, test, and compare different methods to generate from a 𝑁(0,1) distribution.
+```{r}
+# a. Inverse Transform 
+normrandIT <- function() { 
+  u <- runif(1)
+  R <- qnorm(u)
+  return(R)
+}
+
+ITstats <- function(n) { 
+  vals <- rep(0,n)
+  i<- 1
+while (i <= n) {
+  vals[i] = normrandIT()
+  i=i+1 
+}
+return(list(values=vals,average=mean(vals),SD=sd(vals))) 
+}
+
+# b. Box-Muller 
+normrandBM <- function() {
+  u1 <- runif(1)
+  u2 <- runif(1)
+  X <- (-2*log(u1))**(1/2)*cos(2*pi*u2) 
+  Y <- (-2*log(u1))**(1/2)*sin(2*pi*u2) 
+  return(c(X,Y))
+}
+
+BMstats <- function(n) { 
+  vals <- rep(0,n)
+  i<- 1
+while (i <= n) {
+  val = normrandBM() 
+  vals[i] = val[1] 
+  vals[i+1] = val[2] 
+  i=i+2
+}
+  return(list(values=vals,average=mean(vals),SD=sd(vals))) 
+}
+
+# c. Acceptance-Rejection
+normrandAR <- function() { 
+  i <- 0
+while(i<=1) {
+  u1 <- runif(1) 
+  u2 <- runif(1)
+  X <- -log(u1)
+  Y <- -log(u2)
+  x <- ((X-1)**2)/2 
+  if (Y >= x) {
+    r <- sample(c(-1,1),size=1,replace=TRUE,prob=c(0.5,0.5)) 
+    R <- X*r
+    i=i+1
+  } 
+}
+  return(R) 
+  }
+
+ARstats <- function(n) { 
+  vals <- rep(0,n)
+  i<-1
+while (i <= n) {
+  vals[i] = normrandAR()
+  i=i+1 
+  }
+return(list(values=vals,average=mean(vals),SD=sd(vals))) 
+}
+
+# d. Evaluate methods in 5a-5c
+library(stats)
+library(ggplot2)
+
+test <- function(f,n) {
+  result = f(n)
+  sys_time = system.time(f(n))
+  df = data.frame(Method=deparse(substitute(f)),
+                  N=n, 
+                  average=result$average, 
+                  SD=result$SD,
+                  sys_time=sys_time[[1]])
+  return(df) 
+}
+
+run <- list(100,1000,10000,100000)
+
+df1 <- data.frame(Method=c(),N=c(),average=c(),SD=c(),sys_time=c()) 
+
+for(n in run) {
+  df = test(ITstats,n)
+  df1 = rbind(df,df1) 
+}
+
+df2 = data.frame(Method=c(),N=c(),average=c(),SD=c(),sys_time=c()) 
+
+for(n in run) {
+  df = test(ARstats,n)
+  df2 = rbind(df,df2) 
+}
+
+df3 = data.frame(Method=c(),N=c(),average=c(),SD=c(),sys_time=c()) 
+
+for(n in run) {
+  df = test(BMstats,n)
+  df3 = rbind(df,df3) }
+
+(final <- rbind(df1,df2,df3)) 
+
+# plots for evaluation
+# Findings: ITstats and BMstats run faster than ARstats; ITstats is more accurate.
+(plot_average <- ggplot(data = final, aes(x = N, y = average, colour = Method)) + geom_line())
+(plot_SD <- ggplot(data = final, aes(x = N, y = SD, colour = Method)) + geom_line())
+(plot_systime <- ggplot(data = final, aes(x = N, y = sys_time, colour = Method)) + geom_line())
+ 
+# e. One million sample histograms of above three methods
+IT_million <- ITstats(1000000)
+BM_million <- BMstats(1000000)
+AR_million <- ARstats(1000000)
+
+hist(IT_million$values, col="firebrick4", main='One Million Samples: Inverse Transform')
+hist(BM_million$values, col="darkslategray", main='One Million Samples: Box-Muller')
+hist(AR_million$values, col="darkmagenta", main='One Million Samples: Acceptance-Rejection')
+```
+    
+##### 6. Use Monte Carlo integration to estimate the value of π. To summarize the approach, consider the unit quarter circle illustrated in the figure below:
+![q6](figures/hw3_q6.png)   
+Generate 𝑁 pairs of uniform random numbers (𝑥, 𝑦), where 𝑥~ 𝑈(0,1) and 𝑦 ~ 𝑈(0,1), and each (𝑥, 𝑦) pair represents a point in the unit square. To obtain an estimate of π, count the fraction of points that fall inside the unit quarter circle and multiply by 4. Note that the fraction of points that fall inside the quarter circle should tend to the ratio between the area of the unit quarter circle (i.e., 1⁄4 𝜋) as compared to area of the unit square (i.e., 1). We proceed step-by-step:
+```{r}
+# a. create function insidecircle
+insidecircle <- function(x,y) {
+  ifelse(x^2 +y^2 < 1, return(1), return(0))
+}
+
+# b. create function estimatepi
+estimatepi <- function(N) { 
+  result <- c()
+  i <- 1
+  while(i<=N) {
+    x <- runif(1)
+    y <- runif(1)
+    result_i <- insidecircle(x,y) 
+    result <- append(result,result_i) 
+    i <- i+1
+}
+  p <- sum(result)/N
+  pi_est <- 4*p
+  s <- sqrt(p*(1-p)/N)
+  interval <- c(pi_est-1.96*s, pi_est+1.96*s)
+  return(list(pi_estimate=pi_est,standard_error=s,inteval=interval))
+}
+
+# c. estimate pi
+set.seed(5555)
+run <- seq(1000,10000,500)
+final <- data.frame(runs = c(),
+                   pi_estimate = c(), 
+                   standard_error = c(), 
+                   upper = c(), 
+                   lower = c())
+for(n in run) {
+result <- estimatepi(n)
+df <- data.frame(runs = n,
+                  pi_estimate = result$pi_estimate,
+                  standard_error = result$standard_error,
+                  upper = result$inteval[2],
+                  lower = result$inteval[1])
+final <- rbind(final,df) 
+}
+final
+
+# d. estimate Pi 500 times
+i<-1
+final_result <- c() 
+while (i <= 500) {
+  result = estimatepi(5000) # N = 5000
+  result = result$pi_estimate
+  final_result = append(final_result,result) 
+  i=i+1
+}
+
+hist(final_result, main='Estimate Pi 500 Times', col='grey')
+# SD
+sd(final_result)
+# p
+sum(final_result>=3.127982 & final_result <= 3.157351)/500 
+
+```
